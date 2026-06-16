@@ -7,6 +7,8 @@
     "build": "next build",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
+    "db:push": "sqlite3 prisma/dev.db < prisma/init.sql",
+    "db:seed": "node scripts/seed.js",
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {

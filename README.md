@@ -15,16 +15,38 @@
 - Prisma
 - SQLite
 
-## Запуск
+## Подготовка БД
 
 ```bash
 pnpm install
+pnpm --dir apps/blog prisma:generate
+pnpm --dir apps/blog db:push
+pnpm --dir apps/blog db:seed
+pnpm --dir apps/bookstore prisma:generate
+pnpm --dir apps/bookstore db:push
+pnpm --dir apps/bookstore db:seed
+pnpm --dir apps/travel-diary prisma:generate
+pnpm --dir apps/travel-diary db:push
+pnpm --dir apps/travel-diary db:seed
+```
+
+Каждое приложение хранит собственную Prisma-схему и SQLite-файл в папке `prisma`.
+
+## Запуск
+
+```bash
 pnpm dev:blog
 pnpm dev:bookstore
 pnpm dev:travel
 ```
 
-Каждое приложение хранит собственную Prisma-схему в папке `prisma`. UI работает как демонстрационный прототип с локальным состоянием, а схемы БД описывают структуру для подключения постоянного хранения данных.
+Порты:
+
+- Blog: `http://127.0.0.1:3001`
+- Bookstore: `http://127.0.0.1:3002`
+- Travel Diary: `http://127.0.0.1:3003`
+
+UI работает с реальными SQLite-данными через Prisma Client, server actions и простые cookie-сессии.
 
 ## Назначение
 

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
 }
 
 datasource db {
@@ -11,7 +12,7 @@ model User {
   id           Int          @id @default(autoincrement())
   email        String       @unique
   name         String
-  role         Role         @default(USER)
+  role         String       @default("USER")
   passwordHash String
   rentals      Rental[]
   purchases    Purchase[]
@@ -25,7 +26,7 @@ model Book {
   category    String
   year        Int
   price       Int
-  status      BookStatus @default(AVAILABLE)
+  status      String     @default("AVAILABLE")
   rentals     Rental[]
   purchases   Purchase[]
   createdAt   DateTime   @default(now())
@@ -51,15 +52,4 @@ model Purchase {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
   book      Book     @relation(fields: [bookId], references: [id])
-}
-
-enum Role {
-  USER
-  ADMIN
-}
-
-enum BookStatus {
-  AVAILABLE
-  RENTED
-  HIDDEN
 }

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
 }
 
 datasource db {
@@ -16,6 +17,7 @@ model User {
   comments      Comment[]
   following     Subscription[] @relation("following")
   followers     Subscription[] @relation("followers")
+  accessRequests AccessRequest[]
   createdAt     DateTime       @default(now())
 }
 
@@ -23,13 +25,14 @@ model Post {
   id          Int        @id @default(autoincrement())
   title       String
   body        String
-  visibility  Visibility @default(PUBLIC)
+  visibility  String @default("PUBLIC")
   authorId    Int
   author      User       @relation(fields: [authorId], references: [id])
   tags        PostTag[]
-  comments    Comment[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  comments       Comment[]
+  accessRequests AccessRequest[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Tag {
@@ -66,7 +69,15 @@ model Subscription {
   @@id([followerId, followingId])
 }
 
-enum Visibility {
-  PUBLIC
-  REQUEST_ONLY
+model AccessRequest {
+  id          Int                 @id @default(autoincrement())
+  postId      Int
+  requesterId Int
+  status      String   @default("PENDING")
+  post        Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  requester   User                @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([postId, requesterId])
 }

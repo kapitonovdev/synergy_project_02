@@ -35,6 +35,10 @@ button {
   cursor: pointer;
 }
 
+a {
+  text-decoration: none;
+}
+
 .shell {
   min-height: 100vh;
   padding: 28px;
@@ -85,6 +89,14 @@ button {
   grid-template-columns: 310px minmax(0, 1fr) 320px;
   gap: 18px;
   max-width: 1240px;
+  margin: 0 auto;
+}
+
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  max-width: 840px;
   margin: 0 auto;
 }
 
@@ -233,8 +245,34 @@ button {
   padding: 10px;
 }
 
+.edit-box,
+.access-box {
+  background: var(--surface-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.request-row {
+  align-items: center;
+  background: var(--surface-soft);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 10px;
+}
+
 @media (max-width: 1020px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-grid {
     grid-template-columns: 1fr;
   }
 

@@ -1,202 +1,220 @@
-"use client";
+import { buyBook, login, logout, markReminderSent, register, rentBook, updateBook } from "../lib/actions";
+import { getCurrentUser } from "../lib/auth";
+import { prisma } from "../lib/db";
 
-import { useMemo, useState } from "react";
+export const dynamic = "force-dynamic";
 
-type Role = "user" | "admin";
-type Status = "available" | "rented" | "hidden";
-
-type Book = {
-  id: number;
-  title: string;
-  author: string;
-  category: string;
-  year: number;
-  price: number;
-  status: Status;
-  rentedUntil?: string;
+type SearchParams = {
+  category?: string;
+  author?: string;
+  sort?: string;
 };
 
-const initialBooks: Book[] = [
-  { id: 1, title: "Чистый код", author: "Роберт Мартин", category: "Разработка", year: 2008, price: 740, status: "available" },
-  { id: 2, title: "JavaScript. Подробное руководство", author: "Дэвид Флэнаган", category: "Разработка", year: 2020, price: 920, status: "available" },
-  { id: 3, title: "Грокаем алгоритмы", author: "Адитья Бхаргава", category: "Алгоритмы", year: 2016, price: 620, status: "rented", rentedUntil: "2026-08-16" },
-  { id: 4, title: "Дизайн привычных вещей", author: "Дон Норман", category: "UX", year: 2013, price: 680, status: "available" },
-  { id: 5, title: "Предметно-ориентированное проектирование", author: "Эрик Эванс", category: "Архитектура", year: 2003, price: 1050, status: "hidden" }
-];
-
-const statusLabels: Record<Status, string> = {
-  available: "доступна",
-  rented: "в аренде",
-  hidden: "скрыта"
+const statusLabels: Record<string, string> = {
+  AVAILABLE: "доступна",
+  RENTED: "в аренде",
+  HIDDEN: "скрыта"
 };
 
-export default function BookstorePage() {
-  const [role, setRole] = useState<Role>("user");
-  const [books, setBooks] = useState(initialBooks);
-  const [category, setCategory] = useState("all");
-  const [author, setAuthor] = useState("all");
-  const [sort, setSort] = useState("title");
-  const [orders, setOrders] = useState<string[]>([]);
+export default async function BookstorePage({ searchParams }: { searchParams: SearchParams }) {
+  const currentUser = await getCurrentUser();
+  const category = searchParams.category ?? "all";
+  const author = searchParams.author ?? "all";
+  const sort = searchParams.sort ?? "title";
+  const [books, categories, authors, purchases, rentals] = await Promise.all([
+    prisma.book.findMany(),
+    prisma.book.findMany({ distinct: ["category"], select: { category: true }, orderBy: { category: "asc" } }),
+    prisma.book.findMany({ distinct: ["author"], select: { author: true }, orderBy: { author: "asc" } }),
+    currentUser
+      ? prisma.purchase.findMany({ where: { userId: currentUser.id }, include: { book: true }, orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
+    currentUser
+      ? prisma.rental.findMany({ where: { userId: currentUser.id }, include: { book: true }, orderBy: { startsAt: "desc" } })
+      : Promise.resolve([])
+  ]);
 
-  const categories = useMemo(() => Array.from(new Set(books.map((book) => book.category))).sort(), [books]);
-  const authors = useMemo(() => Array.from(new Set(books.map((book) => book.author))).sort(), [books]);
-  const visibleBooks = useMemo(() => {
-    return books
-      .filter((book) => role === "admin" || book.status !== "hidden")
-      .filter((book) => category === "all" || book.category === category)
-      .filter((book) => author === "all" || book.author === author)
-      .sort((a, b) => {
-        if (sort === "year") return b.year - a.year;
-        if (sort === "category") return a.category.localeCompare(b.category, "ru");
-        if (sort === "author") return a.author.localeCompare(b.author, "ru");
-        return a.title.localeCompare(b.title, "ru");
-      });
-  }, [author, books, category, role, sort]);
+  const visibleBooks = books
+    .filter((book) => currentUser?.role === "ADMIN" || book.status !== "HIDDEN")
+    .filter((book) => category === "all" || book.category === category)
+    .filter((book) => author === "all" || book.author === author)
+    .sort((a, b) => {
+      if (sort === "year") return b.year - a.year;
+      if (sort === "category") return a.category.localeCompare(b.category, "ru");
+      if (sort === "author") return a.author.localeCompare(b.author, "ru");
+      return a.title.localeCompare(b.title, "ru");
+    });
 
-  const reminders = books.filter((book) => book.status === "rented" && book.rentedUntil);
-
-  function rentBook(bookId: number, months: number) {
-    const days = months === 0 ? 14 : months * 30;
-    const due = new Date("2026-08-08");
-    due.setDate(due.getDate() + days);
-    setBooks((items) =>
-      items.map((book) =>
-        book.id === bookId ? { ...book, status: "rented", rentedUntil: due.toISOString().slice(0, 10) } : book
-      )
-    );
-    setOrders((items) => [`Аренда оформлена до ${due.toLocaleDateString("ru-RU")}`, ...items]);
-  }
-
-  function buyBook(book: Book) {
-    setOrders((items) => [`Покупка: ${book.title}, ${book.price} руб.`, ...items]);
-  }
-
-  function updateBook(bookId: number, patch: Partial<Book>) {
-    setBooks((items) => items.map((book) => (book.id === bookId ? { ...book, ...patch } : book)));
-  }
+  const reminderLimit = new Date();
+  reminderLimit.setDate(reminderLimit.getDate() + 14);
+  const reminders =
+    currentUser?.role === "ADMIN"
+      ? await prisma.rental.findMany({
+          where: { reminded: false, endsAt: { lte: reminderLimit } },
+          include: { book: true, user: true },
+          orderBy: { endsAt: "asc" }
+        })
+      : [];
 
   return (
     <main className="shell">
       <section className="topbar">
         <div>
           <h1>Bookstore Practice</h1>
-          <p>Каталог книг с пользовательским и административным интерфейсами.</p>
+          <p>Каталог книг с пользовательским и административным интерфейсами на SQLite.</p>
         </div>
-        <label className="row">
-          Роль
-          <select className="field" value={role} onChange={(event) => setRole(event.target.value as Role)}>
-            <option value="user">Пользователь</option>
-            <option value="admin">Администратор</option>
-          </select>
-        </label>
+        {currentUser ? (
+          <form action={logout} className="row">
+            <strong>
+              {currentUser.name} · {currentUser.role === "ADMIN" ? "Администратор" : "Пользователь"}
+            </strong>
+            <button className="btn secondary" type="submit">
+              Выйти
+            </button>
+          </form>
+        ) : null}
       </section>
 
-      <section className="toolbar">
-        <select className="field" value={category} onChange={(event) => setCategory(event.target.value)}>
-          <option value="all">Все категории</option>
-          {categories.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select className="field" value={author} onChange={(event) => setAuthor(event.target.value)}>
-          <option value="all">Все авторы</option>
-          {authors.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select className="field" value={sort} onChange={(event) => setSort(event.target.value)}>
-          <option value="title">Сортировка по названию</option>
-          <option value="category">По категории</option>
-          <option value="author">По автору</option>
-          <option value="year">По году</option>
-        </select>
-      </section>
-
-      <section className="layout">
-        <div className="catalog">
-          {visibleBooks.map((book) => (
-            <article className="book" key={book.id}>
-              <div>
-                <span className={`status ${book.status}`}>{statusLabels[book.status]}</span>
-                <h3>{book.title}</h3>
-                <p className="meta">
-                  {book.author} · {book.category} · {book.year}
-                </p>
-              </div>
-              <strong>{book.price} руб.</strong>
-              {book.rentedUntil && <p className="muted">Аренда до {new Date(book.rentedUntil).toLocaleDateString("ru-RU")}</p>}
-              <div className="row">
-                <button className="btn" onClick={() => buyBook(book)}>
-                  Купить
-                </button>
-                <button className="btn secondary" onClick={() => rentBook(book.id, 0)}>
-                  2 недели
-                </button>
-                <button className="btn secondary" onClick={() => rentBook(book.id, 1)}>
-                  1 месяц
-                </button>
-                <button className="btn secondary" onClick={() => rentBook(book.id, 3)}>
-                  3 месяца
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <aside className="panel">
-          {role === "admin" ? (
-            <>
-              <h2>Панель администратора</h2>
-              <div className="admin-list">
-                {books.map((book) => (
-                  <div className="admin-row" key={book.id}>
-                    <strong>{book.title}</strong>
-                    <input
-                      className="field"
-                      type="number"
-                      value={book.price}
-                      onChange={(event) => updateBook(book.id, { price: Number(event.target.value) })}
-                    />
-                    <select
-                      className="field"
-                      value={book.status}
-                      onChange={(event) => updateBook(book.id, { status: event.target.value as Status })}
-                    >
-                      <option value="available">Доступна</option>
-                      <option value="rented">В аренде</option>
-                      <option value="hidden">Скрыта</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-              <h2 style={{ marginTop: 18 }}>Напоминания</h2>
-              {reminders.map((book) => (
-                <div className="reminder" key={book.id}>
-                  <strong>{book.title}</strong>
-                  <p className="muted">Напомнить пользователю об окончании аренды: {book.rentedUntil}</p>
-                </div>
+      {!currentUser ? (
+        <section className="auth-grid">
+          <form action={login} className="panel form">
+            <h2>Вход</h2>
+            <input className="field" name="email" placeholder="Email" defaultValue="reader@example.com" />
+            <input className="field" name="password" placeholder="Пароль" type="password" defaultValue="123456" />
+            <button className="btn" type="submit">
+              Войти
+            </button>
+            <p className="muted">Администратор: admin@example.com / 123456</p>
+          </form>
+          <form action={register} className="panel form">
+            <h2>Регистрация</h2>
+            <input className="field" name="name" placeholder="Имя" />
+            <input className="field" name="email" placeholder="Email" />
+            <input className="field" name="password" placeholder="Пароль от 6 символов" type="password" />
+            <button className="btn secondary" type="submit">
+              Создать пользователя
+            </button>
+          </form>
+        </section>
+      ) : (
+        <>
+          <form className="toolbar">
+            <select className="field" name="category" defaultValue={category}>
+              <option value="all">Все категории</option>
+              {categories.map((item) => (
+                <option key={item.category} value={item.category}>
+                  {item.category}
+                </option>
               ))}
-            </>
-          ) : (
-            <>
-              <h2>История операций</h2>
-              {orders.length ? (
-                orders.map((order) => (
-                  <p className="reminder" key={order}>
-                    {order}
-                  </p>
-                ))
+            </select>
+            <select className="field" name="author" defaultValue={author}>
+              <option value="all">Все авторы</option>
+              {authors.map((item) => (
+                <option key={item.author} value={item.author}>
+                  {item.author}
+                </option>
+              ))}
+            </select>
+            <select className="field" name="sort" defaultValue={sort}>
+              <option value="title">Сортировка по названию</option>
+              <option value="category">По категории</option>
+              <option value="author">По автору</option>
+              <option value="year">По году</option>
+            </select>
+            <button className="btn secondary" type="submit">
+              Применить
+            </button>
+          </form>
+
+          <section className="layout">
+            <div className="catalog">
+              {visibleBooks.map((book) => (
+                <article className="book" key={book.id}>
+                  <div>
+                    <span className={`status ${book.status.toLowerCase()}`}>{statusLabels[book.status]}</span>
+                    <h3>{book.title}</h3>
+                    <p className="meta">
+                      {book.author} · {book.category} · {book.year}
+                    </p>
+                  </div>
+                  <strong>{book.price} руб.</strong>
+                  <div className="row">
+                    <form action={buyBook}>
+                      <input name="bookId" type="hidden" value={book.id} />
+                      <button className="btn" type="submit">
+                        Купить
+                      </button>
+                    </form>
+                    {[["14", "2 недели"], ["30", "1 месяц"], ["90", "3 месяца"]].map(([period, label]) => (
+                      <form action={rentBook} key={period}>
+                        <input name="bookId" type="hidden" value={book.id} />
+                        <input name="period" type="hidden" value={period} />
+                        <button className="btn secondary" type="submit">
+                          {label}
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <aside className="panel">
+              {currentUser.role === "ADMIN" ? (
+                <>
+                  <h2>Панель администратора</h2>
+                  <div className="admin-list">
+                    {books.map((book) => (
+                      <form action={updateBook} className="admin-row" key={book.id}>
+                        <input name="bookId" type="hidden" value={book.id} />
+                        <strong>{book.title}</strong>
+                        <input className="field" name="price" type="number" defaultValue={book.price} />
+                        <select className="field" name="status" defaultValue={book.status}>
+                          <option value="AVAILABLE">Доступна</option>
+                          <option value="RENTED">В аренде</option>
+                          <option value="HIDDEN">Скрыта</option>
+                        </select>
+                        <button className="btn secondary" type="submit">
+                          Сохранить
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                  <h2 style={{ marginTop: 18 }}>Напоминания</h2>
+                  {reminders.length ? (
+                    reminders.map((rental) => (
+                      <form action={markReminderSent} className="reminder" key={rental.id}>
+                        <input name="rentalId" type="hidden" value={rental.id} />
+                        <strong>{rental.book.title}</strong>
+                        <p className="muted">
+                          {rental.user.name}: аренда до {rental.endsAt.toLocaleDateString("ru-RU")}
+                        </p>
+                        <button className="btn warning" type="submit">
+                          Отметить как отправленное
+                        </button>
+                      </form>
+                    ))
+                  ) : (
+                    <p className="muted">Нет активных напоминаний.</p>
+                  )}
+                </>
               ) : (
-                <p className="muted">Оформите покупку или аренду, чтобы увидеть операцию.</p>
+                <>
+                  <h2>История операций</h2>
+                  {[...purchases.map((item) => `Покупка: ${item.book.title}, ${item.price} руб.`), ...rentals.map((item) => `Аренда: ${item.book.title} до ${item.endsAt.toLocaleDateString("ru-RU")}`)].length ? (
+                    [...purchases.map((item) => `Покупка: ${item.book.title}, ${item.price} руб.`), ...rentals.map((item) => `Аренда: ${item.book.title} до ${item.endsAt.toLocaleDateString("ru-RU")}`)].map((order) => (
+                      <p className="reminder" key={order}>
+                        {order}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="muted">Оформите покупку или аренду, чтобы увидеть операцию.</p>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </aside>
-      </section>
+            </aside>
+          </section>
+        </>
+      )}
     </main>
   );
 }

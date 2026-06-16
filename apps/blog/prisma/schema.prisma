@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  posts         Post[]
+  comments      Comment[]
+  following     Subscription[] @relation("following")
+  followers     Subscription[] @relation("followers")
+  createdAt     DateTime       @default(now())
+}
+
+model Post {
+  id          Int        @id @default(autoincrement())
+  title       String
+  body        String
+  visibility  Visibility @default(PUBLIC)
+  authorId    Int
+  author      User       @relation(fields: [authorId], references: [id])
+  tags        PostTag[]
+  comments    Comment[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @unique
+  posts PostTag[]
+}
+
+model PostTag {
+  postId Int
+  tagId  Int
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  text      String
+  postId    Int
+  authorId  Int
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  followerId  Int
+  followingId Int
+  follower    User @relation("following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User @relation("followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+}
+
+enum Visibility {
+  PUBLIC
+  REQUEST_ONLY
+}

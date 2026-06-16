@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  email        String       @unique
+  name         String
+  role         Role         @default(USER)
+  passwordHash String
+  rentals      Rental[]
+  purchases    Purchase[]
+  createdAt    DateTime     @default(now())
+}
+
+model Book {
+  id          Int        @id @default(autoincrement())
+  title       String
+  author      String
+  category    String
+  year        Int
+  price       Int
+  status      BookStatus @default(AVAILABLE)
+  rentals     Rental[]
+  purchases   Purchase[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Rental {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  bookId    Int
+  startsAt  DateTime @default(now())
+  endsAt    DateTime
+  reminded  Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+  book      Book     @relation(fields: [bookId], references: [id])
+}
+
+model Purchase {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  bookId    Int
+  price     Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  book      Book     @relation(fields: [bookId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BookStatus {
+  AVAILABLE
+  RENTED
+  HIDDEN
+}
